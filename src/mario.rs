@@ -12,10 +12,17 @@ const GROUND_SIZE_HALF_Y: f32 = 25.0;
 const GROUND_SIZE: Vec2 = Vec2 { x: 2000.0, y: 50.0 };
 const GROUND_STARTING_POSITION: Vec3 = Vec3::new(0.0, -300.0, 0.0);
 
+const ENEMY_SIZE: f32 = 25.0;
+const ENEMY_SIZE_HALF: f32 = ENEMY_SIZE / 2.0;
+const ENEMY_STARTING_POSITION: Vec3 = Vec3::new(500.0, -300.0, 0.0);
+const ENEMY_VELOCITY: f32 = 100.0;
+
 #[derive(Component)]
 struct Player;
 #[derive(Component)]
 struct Ground;
+#[derive(Component)]
+struct Enemy;
 
 pub fn exec() {
     App::new()
@@ -25,6 +32,8 @@ pub fn exec() {
         .add_startup_system(startup)
         .add_system(player_move)
         .add_system(player_jump)
+        // .add_system(enemy_move)
+        .add_system(enemy_collision)
         .add_plugin(WorldInspectorPlugin::default())
         .add_plugin(EditorPlugin)
         .run();
@@ -73,6 +82,23 @@ fn startup(
         Velocity::zero(),
         LockedAxes::ROTATION_LOCKED, // bad ;(
         Player,
+        Dominance::group(10),
+    ));
+
+    // Enemy
+    commands.spawn((
+        Name::new("Enemy"),
+        MaterialMesh2dBundle {
+            mesh: meshes.add(shape::Cube { size: ENEMY_SIZE }.into()).into(),
+            material: materials.add(ColorMaterial::from(Color::BLACK)),
+            transform: Transform::from_translation(ENEMY_STARTING_POSITION),
+            ..default()
+        },
+        RigidBody::Dynamic,
+        Collider::cuboid(ENEMY_SIZE_HALF, ENEMY_SIZE_HALF),
+        Velocity::zero(),
+        LockedAxes::ROTATION_LOCKED,
+        Enemy,
     ));
 }
 
@@ -99,6 +125,29 @@ fn player_jump(
 
         if rapier_context.contact_pair(player, ground).is_some() {
             velocity.linvel.y = PLAYER_VELOCITY;
+        }
+    }
+}
+
+fn enemy_move(mut enemy_query: Query<(&mut Velocity), With<Enemy>>) {
+    let mut enemy_vel = enemy_query.single_mut();
+    enemy_vel.linvel.x = -100.0;
+}
+
+fn enemy_collision(
+    rapier_context: Res<RapierContext>,
+    player_query: Query<Entity, With<Player>>,
+    enemy_query: Query<Entity, With<Enemy>>,
+) {
+    if let Some(collision) =
+        rapier_context.contact_pair(player_query.single(), enemy_query.single())
+    {
+        for manifold in collision.manifolds() {
+            // println!("{:?}", manifold.local1);
+            // println!("{:?}", manifold.local2);
+            for contact_point in manifold.points() {
+                println!("{:?}", contact_point.dist());
+            }
         }
     }
 }
