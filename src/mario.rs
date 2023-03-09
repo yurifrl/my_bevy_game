@@ -1,4 +1,5 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
+use bevy_editor_pls::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 
@@ -25,6 +26,7 @@ pub fn exec() {
         .add_system(player_move)
         .add_system(player_jump)
         .add_plugin(WorldInspectorPlugin::default())
+        .add_plugin(EditorPlugin)
         .run();
 }
 
