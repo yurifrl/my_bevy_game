@@ -1,6 +1,5 @@
-mod book;
-mod breakout;
+mod mario;
 
 fn main() {
-    breakout::exec();
+    mario::exec();
 }
