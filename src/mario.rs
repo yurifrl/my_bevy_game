@@ -3,18 +3,25 @@ use bevy_editor_pls::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
 
+const WINDOW_WIDTH: f32 = 1080.0;
+const WINDOW_HEIGHT: f32 = 720.0;
+
 const PLAYER_SIZE_HALF: f32 = PLAYER_SIZE / 2.0;
 const PLAYER_SIZE: f32 = 100.0;
-const PLAYER_STARTING_POSITION: Vec3 = Vec3::new(-500.0, -100.0, 0.0);
+const PLAYER_STARTING_POSITION: Vec3 =
+    Vec3::new(((WINDOW_WIDTH / 2.0) * -1.0) + 100.0, -100.0, 0.0);
 const PLAYER_VELOCITY: f32 = 100.0;
-const GROUND_SIZE_HALF_X: f32 = 1000.0;
+const GROUND_SIZE_HALF_X: f32 = WINDOW_WIDTH / 2.0;
 const GROUND_SIZE_HALF_Y: f32 = 25.0;
-const GROUND_SIZE: Vec2 = Vec2 { x: 2000.0, y: 50.0 };
-const GROUND_STARTING_POSITION: Vec3 = Vec3::new(0.0, -300.0, 0.0);
+const GROUND_SIZE: Vec2 = Vec2 {
+    x: WINDOW_WIDTH,
+    y: 50.0,
+};
+const GROUND_STARTING_POSITION: Vec3 = Vec3::new(0.0, (WINDOW_HEIGHT / 2.0 - 25.0) * -1.0, 5.0);
 
 const ENEMY_SIZE: f32 = 25.0;
 const ENEMY_SIZE_HALF: f32 = ENEMY_SIZE / 2.0;
-const ENEMY_STARTING_POSITION: Vec3 = Vec3::new(500.0, -300.0, 0.0);
+const ENEMY_STARTING_POSITION: Vec3 = Vec3::new(200.0, -300.0, 0.0);
 const ENEMY_VELOCITY: f32 = 100.0;
 
 #[derive(Component)]
@@ -26,14 +33,23 @@ struct Enemy;
 
 pub fn exec() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "MARIO".into(),
+                resolution: (WINDOW_WIDTH, WINDOW_HEIGHT).into(),
+                ..default()
+            }),
+            ..default()
+        }))
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_plugin(RapierDebugRenderPlugin::default())
         .add_startup_system(startup)
         .add_system(player_move)
         .add_system(player_jump)
-        // .add_system(enemy_move)
+        .add_system(enemy_move)
         .add_system(enemy_collision)
+        .add_system(camerman)
+        .add_system(block_left_move)
         .add_plugin(WorldInspectorPlugin::default())
         .add_plugin(EditorPlugin)
         .run();
@@ -61,6 +77,32 @@ fn startup(
                 .into(),
             material: materials.add(ColorMaterial::from(Color::BLUE)),
             transform: Transform::from_translation(GROUND_STARTING_POSITION),
+            ..default()
+        },
+        RigidBody::Fixed,
+        Collider::cuboid(GROUND_SIZE_HALF_X, GROUND_SIZE_HALF_Y),
+        Ground,
+    ));
+
+    // Ground 2
+    commands.spawn((
+        Name::new("Ground"),
+        MaterialMesh2dBundle {
+            mesh: meshes
+                .add(
+                    shape::Quad {
+                        size: GROUND_SIZE,
+                        flip: false,
+                    }
+                    .into(),
+                )
+                .into(),
+            material: materials.add(ColorMaterial::from(Color::DARK_GREEN)),
+            transform: Transform::from_translation(Vec3::new(
+                WINDOW_WIDTH,
+                (WINDOW_HEIGHT / 2.0 - 25.0) * -1.0,
+                5.0,
+            )),
             ..default()
         },
         RigidBody::Fixed,
@@ -121,33 +163,72 @@ fn player_jump(
 ) {
     if input.pressed(KeyCode::Space) {
         let (player, mut velocity) = player_query.single_mut();
-        let ground = ground_query.single();
-
-        if rapier_context.contact_pair(player, ground).is_some() {
-            velocity.linvel.y = PLAYER_VELOCITY;
+        for ground in &ground_query {
+            if rapier_context.contact_pair(player, ground).is_some() {
+                velocity.linvel.y = PLAYER_VELOCITY;
+            }
         }
     }
 }
 
 fn enemy_move(mut enemy_query: Query<(&mut Velocity), With<Enemy>>) {
-    let mut enemy_vel = enemy_query.single_mut();
-    enemy_vel.linvel.x = -100.0;
+    for mut enemy_vel in enemy_query.iter_mut() {
+        enemy_vel.linvel.x = -100.0;
+    }
 }
 
 fn enemy_collision(
+    mut commands: Commands,
     rapier_context: Res<RapierContext>,
     player_query: Query<Entity, With<Player>>,
     enemy_query: Query<Entity, With<Enemy>>,
 ) {
-    if let Some(collision) =
-        rapier_context.contact_pair(player_query.single(), enemy_query.single())
-    {
-        for manifold in collision.manifolds() {
-            // println!("{:?}", manifold.local1);
-            // println!("{:?}", manifold.local2);
-            for contact_point in manifold.points() {
-                println!("{:?}", contact_point.dist());
+    for enemy in &enemy_query {
+        if let Some(collision) = rapier_context.contact_pair(player_query.single(), enemy) {
+            for manifold in collision.manifolds() {
+                if manifold.normal().y == -1.0 {
+                    commands.entity(enemy).despawn();
+                    return;
+                }
+
+                // println!("MORREU");
             }
+        }
+    }
+}
+
+fn camerman(
+    mut camera_query: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,
+    player_query: Query<(&Transform, &Velocity), (With<Player>, Without<Camera2d>)>,
+) {
+    let (player_pos, player_vel) = player_query.single();
+
+    if player_vel.linvel.x > 0.0 {
+        for mut camera in camera_query.iter_mut() {
+            // TODO: move to an external function.
+            // Calculates the "normalized" player position. The player position will start at 0.0
+            let norm_pos = (player_pos.translation.x + (WINDOW_WIDTH / 2.0)) - camera.translation.x;
+            if norm_pos > WINDOW_WIDTH / 2.0 {
+                camera.translation.x += player_vel.linvel.x / 100.0;
+            }
+        }
+    }
+}
+
+fn block_left_move(
+    camera_query: Query<&Transform, (With<Camera2d>, Without<Player>)>,
+    mut player_query: Query<(&mut Transform, &mut Velocity), (With<Player>, Without<Camera2d>)>,
+) {
+    let (mut player_pos, mut vel) = player_query.single_mut();
+    for camera in &camera_query {
+        // TODO: move to an external function.
+        let norm_pos = (player_pos.translation.x + (WINDOW_WIDTH / 2.0))
+            - camera.translation.x
+            - PLAYER_SIZE_HALF;
+
+        if norm_pos < 0.0 {
+            player_pos.translation.x += norm_pos * -1.0;
+            vel.linvel.x = 0.0;
         }
     }
 }
