@@ -6,7 +6,6 @@ use bevy_rapier2d::prelude::*;
 
 const WINDOW_WIDTH: f32 = 1080.0;
 const WINDOW_HEIGHT: f32 = 720.0;
-
 const PLAYER_SIZE_HALF: f32 = PLAYER_SIZE / 2.0;
 const PLAYER_SIZE: f32 = 100.0;
 const PLAYER_STARTING_POSITION: Vec3 =
@@ -19,14 +18,11 @@ const GROUND_SIZE: Vec2 = Vec2 {
     y: 50.0,
 };
 const GROUND_STARTING_POSITION: Vec3 = Vec3::new(0.0, (WINDOW_HEIGHT / 2.0 - 25.0) * -1.0, 5.0);
-
 const ENEMY_SIZE: f32 = 25.0;
 const ENEMY_SIZE_HALF: f32 = ENEMY_SIZE / 2.0;
 const ENEMY_STARTING_POSITION: Vec3 = Vec3::new(200.0, -300.0, 0.0);
 const ENEMY_VELOCITY: f32 = 100.0;
 
-#[derive(Component)]
-struct Player;
 #[derive(Component)]
 struct Ground;
 #[derive(Component)]
@@ -34,7 +30,14 @@ struct Enemy;
 #[derive(Component, Reflect, Resource, Default, InspectorOptions)]
 #[reflect(Resource, InspectorOptions)]
 struct Configuration {
-    jump: f32,
+    jump_speed: f32,
+    speed: f32,
+    clamp: f32,
+    friction: f32,
+}
+#[derive(Component, Default, Copy, Clone, PartialEq, Debug)]
+struct Player {
+    velocity: Vec2,
 }
 
 pub fn main() {
@@ -50,15 +53,25 @@ pub fn main() {
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_plugin(RapierDebugRenderPlugin::default())
         .add_startup_system(startup)
-        .add_system(player_move)
-        .add_system(player_jump)
+        // .add_system(player_move)
+        // .add_system(player_jump)
         .add_system(enemy_move)
         .add_system(enemy_collision)
         .add_system(camerman)
         .add_system(block_left_move)
+        .add_system(player_kinematics)
         .add_plugin(EditorPlugin)
         .init_resource::<Configuration>()
-        .insert_resource(Configuration { jump: 100.10 })
+        .insert_resource(Configuration {
+            jump_speed: 100.00,
+            speed: 40.0,
+            friction: 0.9,
+            clamp: 400.0,
+        })
+        .insert_resource(RapierConfiguration {
+            gravity: Vect::Y * -9.81 * 20.0,
+            ..Default::default()
+        })
         .add_plugin(ResourceInspectorPlugin::<Configuration>::default())
         .run();
 }
@@ -129,13 +142,19 @@ fn startup(
             transform: Transform::from_translation(PLAYER_STARTING_POSITION),
             ..default()
         },
-        RigidBody::Dynamic,
+        RigidBody::KinematicPositionBased,
+        KinematicCharacterController {
+            snap_to_ground: Some(CharacterLength::Absolute(0.1)),
+            autostep: None,
+            apply_impulse_to_dynamic_bodies: false,
+            up: Vec2::Y,
+            // offset: CharacterLength::Absolute(0.01),
+            slide: true,
+            ..default()
+        },
         Collider::cuboid(PLAYER_SIZE_HALF, PLAYER_SIZE_HALF),
-        Velocity::zero(),
-        Ccd::enabled(),
         LockedAxes::ROTATION_LOCKED, // bad ;(
-        Player,
-        Dominance::group(10),
+        Player::default(),
     ));
 
     // Enemy
@@ -155,35 +174,7 @@ fn startup(
     ));
 }
 
-fn player_move(input: Res<Input<KeyCode>>, mut query: Query<&mut Velocity, With<Player>>) {
-    let mut velocity = query.single_mut();
-
-    if input.any_pressed([KeyCode::Right, KeyCode::D]) {
-        velocity.linvel.x = PLAYER_VELOCITY;
-    }
-    if input.any_pressed([KeyCode::Left, KeyCode::A]) {
-        velocity.linvel.x = -PLAYER_VELOCITY;
-    }
-}
-
-fn player_jump(
-    rapier_context: Res<RapierContext>,
-    mut player_query: Query<(Entity, &mut Velocity), With<Player>>,
-    ground_query: Query<Entity, With<Ground>>,
-    input: Res<Input<KeyCode>>,
-    config: Res<Configuration>,
-) {
-    if input.pressed(KeyCode::Space) {
-        let (player, mut velocity) = player_query.single_mut();
-        for ground in &ground_query {
-            if rapier_context.contact_pair(player, ground).is_some() {
-                velocity.linvel.y = config.jump;
-            }
-        }
-    }
-}
-
-fn enemy_move(mut enemy_query: Query<(&mut Velocity), With<Enemy>>) {
+fn enemy_move(mut enemy_query: Query<&mut Velocity, With<Enemy>>) {
     for mut enemy_vel in enemy_query.iter_mut() {
         enemy_vel.linvel.x = -100.0;
     }
@@ -211,17 +202,17 @@ fn enemy_collision(
 
 fn camerman(
     mut camera_query: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,
-    player_query: Query<(&Transform, &Velocity), (With<Player>, Without<Camera2d>)>,
+    player_query: Query<(&Transform, &Player)>,
 ) {
-    let (player_pos, player_vel) = player_query.single();
+    let (transform, player) = player_query.single();
 
-    if player_vel.linvel.x > 0.0 {
+    if player.velocity.x > 0.0 {
         for mut camera in camera_query.iter_mut() {
             // TODO: move to an external function.
             // Calculates the "normalized" player position. The player position will start at 0.0
-            let norm_pos = (player_pos.translation.x + (WINDOW_WIDTH / 2.0)) - camera.translation.x;
+            let norm_pos = (transform.translation.x + (WINDOW_WIDTH / 2.0)) - camera.translation.x;
             if norm_pos > WINDOW_WIDTH / 2.0 {
-                camera.translation.x += player_vel.linvel.x / 100.0;
+                camera.translation.x += player.velocity.x / 100.0;
             }
         }
     }
@@ -229,9 +220,9 @@ fn camerman(
 
 fn block_left_move(
     camera_query: Query<&Transform, (With<Camera2d>, Without<Player>)>,
-    mut player_query: Query<(&mut Transform, &mut Velocity), (With<Player>, Without<Camera2d>)>,
+    mut player_query: Query<(&mut Transform, &mut Player), Without<Camera2d>>,
 ) {
-    let (mut player_pos, mut vel) = player_query.single_mut();
+    let (mut player_pos, mut player) = player_query.single_mut();
     for camera in &camera_query {
         // TODO: move to an external function.
         let norm_pos = (player_pos.translation.x + (WINDOW_WIDTH / 2.0))
@@ -240,7 +231,60 @@ fn block_left_move(
 
         if norm_pos < 0.0 {
             player_pos.translation.x += norm_pos * -1.0;
-            vel.linvel.x = 0.0;
+            player.velocity.x = 0.0;
         }
     }
+}
+
+fn player_kinematics(
+    time: Res<Time>,
+    rapier_config: Res<RapierConfiguration>,
+    mut controller_query: Query<(
+        &mut Player,
+        &mut KinematicCharacterController,
+        Option<&KinematicCharacterControllerOutput>,
+    )>,
+    input: Res<Input<KeyCode>>,
+    config: Res<Configuration>,
+) {
+    if controller_query.is_empty() {
+        return;
+    }
+    let (mut player, mut controller, controller_output) = controller_query.single_mut();
+    let grounded = match controller_output {
+        Some(output) => output.grounded,
+        None => false,
+    };
+
+    let dt = time.delta_seconds();
+    let mut instant_acceleration = Vec2::ZERO;
+    let mut instant_velocity = player.velocity;
+
+    // physics simulation
+    if grounded {
+        // friction
+        instant_velocity.x *= config.friction;
+    } else {
+        // gravity
+        instant_acceleration += Vec2::Y * rapier_config.gravity;
+    }
+
+    if input.any_pressed([KeyCode::Right, KeyCode::D]) {
+        instant_velocity.x += config.speed;
+    }
+    if input.any_pressed([KeyCode::Left, KeyCode::A]) {
+        instant_velocity.x -= config.speed;
+    }
+
+    if input.pressed(KeyCode::Space) {
+        if grounded {
+            instant_velocity.y = config.jump_speed;
+        }
+    }
+
+    instant_velocity =
+        instant_velocity.clamp(Vec2::splat(-config.clamp), Vec2::splat(config.clamp));
+
+    player.velocity = (instant_acceleration * dt) + instant_velocity;
+    controller.translation = Some(player.velocity * dt);
 }
