@@ -259,7 +259,7 @@ fn player_kinematics(
 
     let dt = time.delta_seconds();
     let mut instant_acceleration = Vec2::ZERO;
-    let mut instant_velocity = velocity.angvel.x;
+    let mut instant_velocity = velocity.angvel.;
 
     // physics simulation
     if grounded {
