@@ -152,6 +152,7 @@ fn startup(
             slide: true,
             ..default()
         },
+        Velocity::default(),
         Collider::cuboid(PLAYER_SIZE_HALF, PLAYER_SIZE_HALF),
         LockedAxes::ROTATION_LOCKED, // bad ;(
         Player::default(),
@@ -240,7 +241,7 @@ fn player_kinematics(
     time: Res<Time>,
     rapier_config: Res<RapierConfiguration>,
     mut controller_query: Query<(
-        &mut Player,
+        &mut Velocity,
         &mut KinematicCharacterController,
         Option<&KinematicCharacterControllerOutput>,
     )>,
@@ -250,7 +251,7 @@ fn player_kinematics(
     if controller_query.is_empty() {
         return;
     }
-    let (mut player, mut controller, controller_output) = controller_query.single_mut();
+    let (mut velocity, mut controller, controller_output) = controller_query.single_mut();
     let grounded = match controller_output {
         Some(output) => output.grounded,
         None => false,
@@ -258,7 +259,7 @@ fn player_kinematics(
 
     let dt = time.delta_seconds();
     let mut instant_acceleration = Vec2::ZERO;
-    let mut instant_velocity = player.velocity;
+    let mut instant_velocity = velocity.angvel.x;
 
     // physics simulation
     if grounded {

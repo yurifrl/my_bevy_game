@@ -4,12 +4,10 @@
 
 - [X] Movement
 - [X] Jump
-- [ ] Perfect Movement 
-- [ ] Perfect Jump
-- [ ] Map Scroll
+- [X] Map Scroll
 - [ ] Pits 
 - [ ] Pit fall
-- [ ] Mushroon gamkes player grown
+- [ ] Mushroon makes player grown
 - [ ] Take hit makes player shrink 
 - [ ] Life count mechanic
 - [ ] Death mechanic
@@ -22,3 +20,5 @@
 - [ ] Mushron
 - [ ] Flower
 - [ ] Grow uppon eating mushroon
+- [ ] Perfect Movement 
+- [ ] Perfect Jump
