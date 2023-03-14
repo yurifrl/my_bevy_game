@@ -243,32 +243,6 @@ fn enemy_collision(
     >,
     enemy_query: Query<Entity, With<Enemy>>,
 ) {
-    // // let handle_enemy_query = |collision: &CharacterCollision| {
-    // //     enemy_query
-    // //         .iter()
-    // //         .filter(move |enemy| *enemy == collision.entity.clone())
-    // // };
-
-    // let handle_despawn = |entity: Entity| {
-    //     commands.entity(entity).despawn();
-    // };
-
-    // let handle_collisions = |player: &KinematicCharacterControllerOutput| {
-    //     player
-    //         .collisions
-    //         .iter()
-    //         .filter(|collision| collision.toi.normal1.y == 1.0)
-    //         // .flat_map(handle_enemy_query)
-    //         .flat_map(|collision| {
-    //             enemy_query
-    //                 .iter()
-    //                 .filter(|enemy| *enemy == collision.entity)
-    //         })
-    //         .for_each(handle_despawn);
-    // };
-
-    // player_query.single().map(handle_collisions);
-
     if let Some(player) = player_query.single() {
         for collision in player.collisions.iter() {
             if collision.toi.normal1.y == 1.0 {
