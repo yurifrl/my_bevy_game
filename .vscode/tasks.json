@@ -1,0 +1,19 @@
+{
+    // https://stackoverflow.com/questions/60255906/how-to-close-the-task-terminal-automatically-after-vscode-debugging#60280089
+    // Ctrl+Shit+B
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cargo run",
+            "type": "shell",
+            "command": "~/.cargo/bin/cargo",
+            "args": [
+                "run"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+        }
+    ]
+}

@@ -22,3 +22,6 @@
 - [ ] Grow uppon eating mushroon
 - [ ] Perfect Movement 
 - [ ] Perfect Jump
+
+
+

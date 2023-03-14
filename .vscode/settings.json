@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.diagnostics.disabled": [
+        "unresolved-proc-macro"
+    ],
+    "rust-analyzer.typing.autoClosingAngleBrackets.enable": true
+}

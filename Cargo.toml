@@ -1,3 +1,5 @@
+#  [How to integrate with rust](https://stackoverflow.com/questions/46885292/how-to-launch-a-rust-application-from-visual-studio-code)
+
 [package]
 name = "my_bevy_game"
 version = "0.1.0"
