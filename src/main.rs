@@ -243,17 +243,25 @@ fn enemy_collision(
     >,
     enemy_query: Query<Entity, With<Enemy>>,
 ) {
-    if let Some(player) = player_query.single() {
-        for collision in player.collisions.iter() {
-            if collision.toi.normal1.y == 1.0 {
-                for enemy in &enemy_query {
-                    if enemy == collision.entity {
-                        commands.entity(enemy).despawn();
-                    }
-                }
-            }
-        }
-    }
+    let handle_enemy_query = |c: &CharacterCollision| {
+        let entity = c.entity.clone();
+        enemy_query.iter().filter(move |enemy| *enemy == entity)
+    };
+
+    let handle_despawn = |entity: Entity| {
+        commands.entity(entity).despawn();
+    };
+
+    let handle_collisions = |player: &KinematicCharacterControllerOutput| {
+        player
+            .collisions
+            .iter()
+            .filter(|c| c.toi.normal1.y == 1.0)
+            .flat_map(handle_enemy_query)
+            .for_each(handle_despawn);
+    };
+
+    player_query.single().map(handle_collisions);
 }
 
 fn camerman(
